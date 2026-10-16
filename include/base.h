@@ -8,23 +8,24 @@
 #include <string>
 #include <optional>
 #include <unordered_map>
-#include <vulkan/vulkan.h>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
 #include <functional>
 
-#ifdef WIN32
+#ifdef _WIN32
 
 #define VK_USE_PLATFORM_WIN32_KHR
 #define NOMINMAX
-
 #include <Windows.h>
 
 #endif
 
+#include <vulkan/vulkan.h>
+
 #define VKCHECK(expr) _VkCheck(#expr, (expr), __FILE__, __LINE__)
+#define RUNTIME_ASSERT(expr) _RuntimeAssert(#expr, (expr), __FILE__, __LINE__)
 
 #define FORI(number) for (uint64_t i = 0; i < number; ++i)
 #define FORX(number, x) for (uint64_t x = 0; x < number; ++x)
@@ -44,6 +45,12 @@ inline VkResult _VkCheck(const char* expr, VkResult result, const char* file_nam
         throw std::runtime_error(std::format("Vulkan calling error: [ {} ] returned {} at {}:{}", expr, static_cast<int>(result), file_name, line));
     }
     return result;
+}
+
+inline void _RuntimeAssert(const char* expr, bool result, const char* file_name, int line) {
+    if (!result) {
+        throw std::runtime_error(std::format("Runtime assert failed: [ {} ] at {}:{}", expr, static_cast<int>(result), file_name, line));
+    }
 }
 
 namespace vkdiffusion

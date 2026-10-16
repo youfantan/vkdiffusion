@@ -103,6 +103,7 @@ namespace vkdiffusion
     private:
         VkGRAMAllocator& allocator_;
         std::vector<uint32_t> shape_;
+        std::vector<uint32_t> stride_;
         TensorDataType type_;
         size_t size_;
         VkGRAMHandle gpu_buffer_;
@@ -112,6 +113,12 @@ namespace vkdiffusion
         Tensor(VkGRAMAllocator& allocator, TensorDataType type, const std::vector<uint32_t>& shape, const std::string& name = "") : allocator_(allocator), shape_(shape), type_(type), size_(1), name_(name) {
             for (auto s : shape) size_ *= s;
             size_ *= ParseTensorTypeSize(type);
+            stride_.resize(shape_.size());
+            size_t k = 1;
+            for (int64_t i = shape_.size() - 1; i >= 0; --i) {
+                stride_[i] = k;
+                k *= shape_[i];
+            }
             gpu_buffer_ = allocator.AllocateRemoteBuffer(size_, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, name);
         }
 
@@ -127,6 +134,10 @@ namespace vkdiffusion
 
         const std::vector<uint32_t>& GetShape() const {
             return shape_;
+        }
+
+        const std::vector<uint32_t>& GetStride() const {
+            return stride_;
         }
 
         size_t GetSize() const {
@@ -146,20 +157,13 @@ namespace vkdiffusion
         Tensor& tensor_;
         VkGRAMAllocator& allocator_;
         VkGRAMHandle cpu_buffer_;
-        std::vector<size_t> strides_;
-
     public:
         TensorView(Tensor& tensor) : tensor_(tensor), allocator_(tensor.allocator_), cpu_buffer_(allocator_.AllocateLocalBuffer(tensor.size_, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, tensor.name_ + "_View")) {
             memset(cpu_buffer_->GetMapped(), 0, tensor.size_);
-            strides_.resize(tensor_.shape_.size());
-            size_t k = 1;
-            for (int64_t i = tensor_.shape_.size() - 1; i >= 0; --i) {
-                strides_[i] = k;
-                k *= tensor_.shape_[i];
-            }
+
         }
         NO_COPY(TensorView);
-        TensorView(TensorView&& other) noexcept : tensor_(other.tensor_), allocator_(other.allocator_), cpu_buffer_(other.cpu_buffer_), strides_(std::move(other.strides_)) {
+        TensorView(TensorView&& other) noexcept : tensor_(other.tensor_), allocator_(other.allocator_), cpu_buffer_(other.cpu_buffer_) {
             other.cpu_buffer_ = nullptr;
         }
         TensorView& operator=(TensorView&&) = delete;
@@ -175,7 +179,7 @@ namespace vkdiffusion
         void LoadFromFile(const std::string& file, size_t offset) {
             auto ptr = cpu_buffer_->GetMapped();
             std::ifstream input(file, std::ios::in | std::ios::binary);
-            input.seekg(static_cast<std::istream::off_type>(offset), std::ios::in | std::ios::binary);
+            input.seekg(static_cast<std::istream::off_type>(offset), std::ios::beg);
             if (!input) throw std::runtime_error(std::format("Cannot load tensor from file {} because file not exists", file));
             input.read(static_cast<char*>(ptr), static_cast<std::streamsize>(tensor_.size_));
         }
@@ -185,18 +189,23 @@ namespace vkdiffusion
             memcpy(mapping, buffer.ptr, tensor_.size_);
         }
 
+        void DumpToFile(const std::string& file) const {
+            std::ofstream output(file, std::ios::out | std::ios::binary);
+            output.write(static_cast<const char*>(cpu_buffer_->GetMapped()), tensor_.size_);
+        }
+
         template<TensorDataType _DT>
         TensorDataTypeTraits<_DT>::Type& At(std::initializer_list<uint32_t> index) {
             using AccessType = TensorDataTypeTraits<_DT>::Type;
-
             if (_DT != tensor_.type_) throw std::runtime_error(std::format("TensorType of Tensor unmatched while access TensorView: Tensor {} / Tensor View {}", ParseTensorTypeAlias(tensor_.type_), TensorDataTypeTraits<_DT>::StandardTypeAlias));
             if (index.size() != tensor_.shape_.size()) {
                 throw std::runtime_error(std::format("TensorView access error: shapes not equals. Access {}, Tensor {}", index.size(), tensor_.shape_.size()));
             }
             size_t offset = 0;
             for (auto i = 0; i < index.size(); ++i) {
-                offset += index.data()[i] * strides_[i];
+                offset += index.data()[i] * tensor_.stride_[i];
             }
+            if (offset * sizeof(TensorDataTypeTraits<_DT>::Type) >= tensor_.size_) throw std::runtime_error(std::format("Tensor View access out of range: index {} / size {}", offset, tensor_.size_));
             return static_cast<AccessType*>(cpu_buffer_->GetMapped())[offset];
         }
 
@@ -211,7 +220,7 @@ namespace vkdiffusion
             }
             size_t offset = 0;
             for (auto i = 0; i < index.size(); ++i) {
-                offset += index.data()[i] * strides_[i];
+                offset += index.data()[i] * tensor_.stride_[i];
             }
             return static_cast<const AccessType*>(cpu_buffer_->GetMapped())[offset];
         }
@@ -220,4 +229,12 @@ namespace vkdiffusion
             if (cpu_buffer_ != nullptr) allocator_.MarkAsExpired(cpu_buffer_);
         }
     };
+
+    inline Tensor LoadTensorFromFile(VkGRAMAllocator& allocator, TensorDataType type, const std::vector<uint32_t>& shape, const std::string& path, size_t offset, const std::string& name) {
+        Tensor tensor(allocator, type, shape, name);
+        TensorView tv(tensor);
+        tv.LoadFromFile(path, offset);
+        tv.Upload();
+        return tensor;
+    }
 }

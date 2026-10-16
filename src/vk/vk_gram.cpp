@@ -47,8 +47,8 @@ namespace vkdiffusion
             VkMemoryBarrier barrier{
                 .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
                 .pNext = nullptr,
-                .srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
-                .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT
+                .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+                .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT
             };
             vkCmdPipelineBarrier(
                 command_buffer,
@@ -59,6 +59,7 @@ namespace vkdiffusion
                 0, nullptr, 0, nullptr);
             vkCmdCopyBuffer(command_buffer, remote->GetVkBuffer(), local->GetVkBuffer(), 1, &copy_region);
         });
+        fence_.CPUWait(nval);
         remote->GetFenceValue() = nval;
         local->GetFenceValue() = nval;
     }

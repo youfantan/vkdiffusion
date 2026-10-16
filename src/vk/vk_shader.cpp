@@ -11,9 +11,9 @@ VkShaderModule vkdiffusion::VkShaderManager::CompileShader(const std::string& sh
         compiler_, src->c_str(), src->size(), ParseShaderType(type), shader_src_path.c_str(), entry_func.c_str(), opt
     );
     if (shaderc_result_get_compilation_status(r) != shaderc_compilation_status_success) {
-        shaderc_result_release(r);
         shaderc_compile_options_release(opt);
-        throw std::runtime_error(std::format("Shader source compile error: \n{}", shaderc_result_get_error_message(r)));
+        std::cout << std::format("Shader source compile error: \n{}", shaderc_result_get_error_message(r)) << std::endl;
+        exit(EXIT_FAILURE);
     }
     container_.emplace_back(shaderc_result_get_bytes(r), shaderc_result_get_length(r));
     shaderc_result_release(r);

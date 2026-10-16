@@ -1,54 +1,36 @@
 #include <vk/vk_framework.h>
 #include <io/model.h>
+#include <platform/win32.h>
+#include <../include/op/op_conv2d.h>
+#include <diffusion/unet.h>
 
 using namespace vkdiffusion;
 
-struct PushConstants {
-    uint32_t width;
-    uint32_t height;
-};
-
 int main() {
-    constexpr uint32_t width = 1024;
-    constexpr uint32_t height = 1024;
-    constexpr uint32_t local_size = 16;
-    constexpr size_t element_count = static_cast<size_t>(width) * height;
-    std::vector<float> host_a(element_count);
-    std::vector<float> host_b(element_count);
-    std::vector<float> host_c(element_count, 0.0f);
-    for (size_t i = 0; i < element_count; ++i) {
-        host_a[i] = static_cast<float>(i % 97) * 0.5f;
-        host_b[i] = static_cast<float>(i % 31) + 1.0f;
-    }
     VkComputeFramework vkcf;
-    auto comp_shader = vkcf.GetShaderManager().CompileShader("shaders/mul.comp", VkShaderManager::ShaderType::COMPUTE_SHADER);
-    vkcf.CreatePipeline("mul")
-        .BindComputeShader(comp_shader)
-        .BindStorageBuffer(0)
-        .BindStorageBuffer(1)
-        .BindStorageBuffer(2)
-        .PushConstant(0, sizeof(PushConstants))
-        .Build();
+    SafetensorsLoader loader(vkcf.GetAllocator());
+    Safetensors sd_1_5 = loader.Load("models/v1-5-pruned-emaonly.safetensors");
+    auto latent = LoadTensorFromFile(vkcf.GetAllocator(), TensorDataType::F32, { 1, 4, 64, 64 }, "case0/latent.f32.bin", 0, "Latent");
+    auto text_embedding = LoadTensorFromFile(vkcf.GetAllocator(), TensorDataType::F32, { 1, 77, 768 }, "case0/context.f32.bin", 0, "TextEmbedding");
+    auto timestep_str = ReadFileIntoString("case0/timestep.i64.bin").value();
+    uint64_t timestep = *reinterpret_cast<uint64_t*>(&timestep_str[0]);
+    auto& input_blocks_0_0_weight = sd_1_5.LoadTensor("model.diffusion_model.input_blocks.0.0.weight");
+    auto& input_blocks_0_0_bias = sd_1_5.LoadTensor("model.diffusion_model.input_blocks.0.0.bias");
+    auto& time_embed_0_weight = sd_1_5.LoadTensor("model.diffusion_model.time_embed.0.weight");
+    auto& time_embed_0_bias = sd_1_5.LoadTensor("model.diffusion_model.time_embed.0.bias");
+    auto& time_embed_2_weight = sd_1_5.LoadTensor("model.diffusion_model.time_embed.2.weight");
+    auto& time_embed_2_bias = sd_1_5.LoadTensor("model.diffusion_model.time_embed.2.bias");
+    Tensor conv_in(vkcf.GetAllocator(), TensorDataType::F32, { 1, 320, 64, 64 }, "ConvIn");
+    UNet<TensorDataType::F32> unet(vkcf, sd_1_5);
+    HighPerformanceCounter counter;
+    counter.Start();
+    auto v = unet.TimestepEmbedding(static_cast<float>(timestep), 1, 320);
+    counter.Stop();
+    std::cout << "TimeEmbedding time resuming: " << counter.GetDurationUs() << std::endl;
+    TensorView v_view(v);
+    v_view.Download();
+    v_view.DumpToFile("proj.f32.bin");
 
-    VkGRAMAllocator& allocator = vkcf.GetAllocator();
-    Tensor tensor_a(allocator, TensorDataType::F32, { 1024, 1024 }, "TensorA");
-    Tensor tensor_b(allocator, TensorDataType::F32, { 1024, 1024 }, "TensorB");
-    Tensor tensor_c(allocator, TensorDataType::F32, { 1024, 1024 }, "TensorC");
-    TensorView tensor_a_view(tensor_a);
-    TensorView tensor_b_view(tensor_b);
-    tensor_a_view.LoadFromMemory(host_a);
-    tensor_a_view.Upload();
-    tensor_b_view.LoadFromMemory(host_b);
-    tensor_b_view.Upload();
-    PushConstants push_constants { width, height };
-    VkComputeTask task("mul");
-    task.BindBuffer(0, tensor_a.GetGPUHandle())
-        .BindBuffer(1, tensor_b.GetGPUHandle())
-        .BindBuffer(2, tensor_c.GetGPUHandle())
-        .PushConstant(&push_constants, sizeof(push_constants))
-        .Dispatch(width / local_size, height / local_size);
-    vkcf.ExecuteTask(task);
-    TensorView tensor_c_view(tensor_c);
-    tensor_c_view.Download();
-    auto* proxy = &tensor_c_view.At<TensorDataType::F32>({ 0, 0 });
+
+
 }

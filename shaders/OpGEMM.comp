@@ -1,0 +1,59 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer TensorA {
+    float data[];
+} a_tensor;
+
+layout(std430, set = 0, binding = 1) readonly buffer TensorB {
+    float data[];
+} b_tensor;
+
+layout(std430, set = 0, binding = 2) readonly buffer TensorBias {
+    float data[];
+} bias_tensor;
+
+layout(std430, set = 0, binding = 3) buffer TensorOutput {
+    float data[];
+} output_tensor;
+
+layout(push_constant) uniform GEMMParams {
+    uvec2 tensor_a_shape; // [M, K] or [K, M]
+    uvec2 tensor_a_stride;
+    uvec2 tensor_b_shape; // [K, N] or [N, K]
+    uvec2 tensor_b_stride;
+    uvec2 output_shape; // [M, N]
+    uvec2 output_stride;
+    float alpha;
+    float beta;
+    uint bias_shape;
+    uint trans_a;
+    uint trans_b;
+} gemm_params;
+
+void main() {
+    uint M = gemm_params.trans_a == 0 ? gemm_params.tensor_a_shape.x : gemm_params.tensor_a_shape.y;
+    uint K = gemm_params.trans_a == 0 ? gemm_params.tensor_a_shape.y : gemm_params.tensor_a_shape.x;
+    uint N = gemm_params.trans_b == 0 ? gemm_params.tensor_b_shape.y : gemm_params.tensor_b_shape.x;
+    float alpha = gemm_params.alpha;
+    float beta = gemm_params.beta;
+    uint oX = gl_GlobalInvocationID.x;
+    uint oY = gl_GlobalInvocationID.y;
+    if (oX >= N || oY >= M) return;
+    float accumulation = 0;
+    uint o_index = gemm_params.output_stride.x * oY + gemm_params.output_stride.y * oX;
+    for (uint k = 0; k < K; ++k) {
+        uint a_index = gemm_params.trans_a == 0
+        ? gemm_params.tensor_a_stride.x * oY + gemm_params.tensor_a_stride.y * k
+        : gemm_params.tensor_a_stride.x * k + gemm_params.tensor_a_stride.y * oY;
+        uint b_index = gemm_params.trans_b == 0
+        ? gemm_params.tensor_b_stride.x * k + gemm_params.tensor_b_stride.y * oX
+        : gemm_params.tensor_b_stride.x * oX + gemm_params.tensor_b_stride.y * k;
+        accumulation += a_tensor.data[a_index] * b_tensor.data[b_index];
+    }
+    accumulation *= alpha;
+    if (beta != 0.0) accumulation += output_tensor.data[o_index] * beta;
+    float bias = gemm_params.bias_shape == 0 ? 0 : bias_tensor.data[oX];
+    output_tensor.data[o_index] = accumulation + bias;
+}

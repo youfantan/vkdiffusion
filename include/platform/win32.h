@@ -1,6 +1,7 @@
 #pragma once
 
 #include <base.h>
+#include <chrono>
 #include <string>
 
 namespace vkdiffusion
@@ -102,4 +103,33 @@ namespace vkdiffusion
         return DefWindowProc(hwnd, msg, w, l);
     }
 
+    class HighPerformanceCounter {
+    private:
+        LARGE_INTEGER frequency_ {};
+        LARGE_INTEGER start_ {};
+        LARGE_INTEGER end_ {};
+        double duration_us_;
+    public:
+        HighPerformanceCounter() : duration_us_(0.0) {
+            QueryPerformanceFrequency(&frequency_);
+            start_.QuadPart = 0;
+            end_.QuadPart = 0;
+        }
+
+        void Start() {
+            start_.QuadPart = 0;
+            end_.QuadPart = 0;
+            duration_us_ = 0.0;
+            QueryPerformanceCounter(&start_);
+        }
+
+        void Stop() {
+            QueryPerformanceCounter(&end_);
+            duration_us_ += static_cast<double>(end_.QuadPart - start_.QuadPart) * 1000000.0 / static_cast<double>(frequency_.QuadPart);
+        }
+
+        std::chrono::microseconds GetDurationUs() const {
+            return std::chrono::microseconds(static_cast<long long>(duration_us_));
+        }
+    };
 }

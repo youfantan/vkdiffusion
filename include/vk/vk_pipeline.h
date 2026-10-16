@@ -58,7 +58,6 @@ namespace vkdiffusion
     class VkComputeTask {
         std::string pipeline_name_;
         std::vector<VkGRAMHandle> handles_;
-        std::vector<uint64_t> fence_values_;
         std::map<uint32_t, VkDescriptorBufferInfo> buffers_;
         std::map<uint32_t, VkDescriptorImageInfo> images_;
         std::vector<std::byte> push_constants_;
@@ -68,6 +67,14 @@ namespace vkdiffusion
         explicit VkComputeTask(std::string pipeline_name) : pipeline_name_(std::move(pipeline_name)) {
 
         }
+        VkComputeTask(VkComputeTask&& other) noexcept : pipeline_name_(std::move(other.pipeline_name_)),
+        handles_(std::move(other.handles_)), buffers_(std::move(other.buffers_)),
+        images_(std::move(other.images_)), push_constants_(std::move(other.push_constants_)), push_constant_offset_(other.push_constant_offset_),
+        group_count_{ other.group_count_[0], other.group_count_[1], other.group_count_[2] } {
+
+        }
+        VkComputeTask& operator=(VkComputeTask&&) = delete;
+        NO_COPY(VkComputeTask);
 
         VkComputeTask& BindBuffer(uint32_t binding, VkGRAMHandle buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE) {
             handles_.push_back(buffer);
@@ -87,17 +94,15 @@ namespace vkdiffusion
             return *this;
         }
 
-        VkComputeTask& Dispatch(uint32_t x, uint32_t y = 1, uint32_t z = 1) {
+        VkComputeTask& Dispatch(uint32_t x, uint32_t y, uint32_t z) {
             group_count_[0] = x;
             group_count_[1] = y;
             group_count_[2] = z;
             return *this;
         }
 
-        const std::vector<uint64_t>& GetFenceValues() {
-            fence_values_.clear();
-            for (auto h : handles_) fence_values_.push_back(h->GetFenceValue());
-            return fence_values_;
+        uint64_t GetFenceValue() const {
+            return (*std::max_element(handles_.begin(), handles_.end(), [](auto a, auto b) { return a->GetFenceValue() < b->GetFenceValue(); }))->GetFenceValue();
         }
 
         void UpdateFenceValues(uint64_t new_fence_value) const {

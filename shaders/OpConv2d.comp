@@ -1,0 +1,83 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer TensorInput {
+    float data[];
+} input_tensor;
+
+layout(std430, set = 0, binding = 1) readonly buffer TensorKernel {
+    float data[];
+} kernel_tensor;
+
+layout(std430, set = 0, binding = 2) readonly buffer TensorBias {
+    float data[];
+} bias_tensor;
+
+layout(std430, set = 0, binding = 3) buffer TensorOutput {
+    float data[];
+} output_tensor;
+
+layout(push_constant) uniform Conv2DParams {
+    uvec4 input_tensor_shape; // [N,Cin,H,W]
+    uvec4 input_tensor_stride;
+    uvec4 weight_tensor_shape; // [Cout,Cin,H,W]
+    uvec4 weight_tensor_stride;
+    uvec4 output_tensor_shape; // [N,Cout,H,W]
+    uvec4 output_tensor_stride;
+    uint bias_tensor_shape;
+    uint padding;
+    uint stride;
+    uint _padding;
+} conv2d_params;
+
+void main() {
+    uint N = conv2d_params.input_tensor_shape.x;
+    uint Cin = conv2d_params.input_tensor_shape.y;
+    uint H = conv2d_params.input_tensor_shape.z;
+    uint W = conv2d_params.input_tensor_shape.w;
+    uint Cout = conv2d_params.weight_tensor_shape.x;
+    uint kH = conv2d_params.weight_tensor_shape.z;
+    uint kW = conv2d_params.weight_tensor_shape.w;
+    uint padding = conv2d_params.padding;
+    uint stride = conv2d_params.stride;
+
+    uint wX = gl_GlobalInvocationID.x;
+    uint wY = gl_GlobalInvocationID.y;
+    uint wZ = gl_GlobalInvocationID.z;
+    uint wN = wZ / Cout;
+    uint wC = wZ % Cout;
+    uint oH = conv2d_params.output_tensor_shape.z;
+    uint oW = conv2d_params.output_tensor_shape.w;
+
+    if (wX >= oW || wY >= oH || wN >= N) {
+        return;
+    }
+
+    float accumulate = bias_tensor.data[wC];
+    for (uint c = 0; c < Cin; ++c) {
+        for (uint y = 0; y < kH; ++y) {
+            for (uint x = 0; x < kW; ++x) {
+                int ih = int(wY * stride) - int(padding) + int(y);
+                int iw = int(wX * stride) - int(padding) + int(x);
+                if (ih < 0 || ih >= int(H) || iw < 0 || iw >= int(W)) {
+                    continue;
+                }
+                uint input_index = wN * conv2d_params.input_tensor_stride.x +
+                        c * conv2d_params.input_tensor_stride.y +
+                        uint(ih) * conv2d_params.input_tensor_stride.z +
+                        uint(iw) * conv2d_params.input_tensor_stride.w;
+                uint weight_index = wC * conv2d_params.weight_tensor_stride.x +
+                        c * conv2d_params.weight_tensor_stride.y +
+                        y * conv2d_params.weight_tensor_stride.z +
+                        x * conv2d_params.weight_tensor_stride.w;
+                accumulate += input_tensor.data[input_index] * kernel_tensor.data[weight_index];
+            }
+        }
+    }
+    uint out_index = wN * conv2d_params.output_tensor_stride.x +
+            wC * conv2d_params.output_tensor_stride.y +
+            wY * conv2d_params.output_tensor_stride.z +
+            wX * conv2d_params.output_tensor_stride.w;
+    output_tensor.data[out_index] = accumulate;
+}

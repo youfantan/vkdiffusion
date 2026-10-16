@@ -32,6 +32,11 @@ add_executable(vkdiffusion
         include/vk/vk_init.h
         include/vk/vk_pipeline.h
         include/vk/vk_sync.h
+        include/op/op_conv2d.h
+        include/op/op_GEMM.h
+        include/op/op_linear.h
+        include/op/op_SiLU.h
+        include/diffusion/unet.h
 )
 
 target_include_directories(vkdiffusion PUBLIC include)
@@ -44,7 +49,7 @@ target_link_libraries(vkdiffusion PRIVATE Vulkan::Vulkan
 
 target_compile_definitions(vkdiffusion PRIVATE UNICODE)
 
-if (WIN32)
+if (_WIN32)
     set(VULKAN_LOADER_DLL "")
     foreach(_candidate "$ENV{VULKAN_SDK}/Bin/vulkan-1.dll" "$ENV{SystemRoot}/System32/vulkan-1.dll")
         if (EXISTS "${_candidate}")
