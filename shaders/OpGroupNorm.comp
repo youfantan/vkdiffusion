@@ -1,0 +1,107 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer TensorInput {
+    float data[];
+} input_tensor;
+
+layout(std430, set = 0, binding = 1) readonly buffer TensorWeight {
+    float data[];
+} weight_tensor;
+
+layout(std430, set = 0, binding = 2) readonly buffer TensorBias {
+    float data[];
+} bias_tensor;
+
+layout(std430, set = 0, binding = 3) buffer TensorOutput {
+    float data[];
+} output_tensor;
+
+layout(push_constant) uniform GroupNormParams {
+    uvec4 input_shape;
+    uvec4 input_stride;
+    uint weight_shape;
+    uint groups;
+    float eps;
+} group_norm_params;
+
+shared float group_sum[256];
+
+uint input_offset(uint n, uint channel, uint pixel) {
+    uint W = group_norm_params.input_shape.w;
+    uint h = pixel / W;
+    uint w = pixel - h * W;
+    return n * group_norm_params.input_stride.x +
+           channel * group_norm_params.input_stride.y +
+           h * group_norm_params.input_stride.z +
+           w * group_norm_params.input_stride.w;
+}
+
+void main() {
+    uint N = group_norm_params.input_shape.x;
+    uint C = group_norm_params.input_shape.y;
+    uint H = group_norm_params.input_shape.z;
+    uint W = group_norm_params.input_shape.w;
+    uint G = group_norm_params.groups;
+
+    uint n = gl_WorkGroupID.x;
+    uint g = gl_WorkGroupID.y;
+    if (n >= N || g >= G) {
+        return;
+    }
+    uint channels_per_group = C / G;
+    uint elements_per_group =  H * W;
+    uint elements_per_invocation = (elements_per_group + 255) / 256;
+    uint tX = gl_LocalInvocationID.x;
+    uint tY = gl_LocalInvocationID.y;
+    uint tid =  (tY * 16) + tX;
+    float sum = 0.0f;
+    for (uint c = 0; c < channels_per_group; ++c) {
+        for (uint i = 0; i < elements_per_invocation; ++i) {
+            uint offset = tid * elements_per_invocation + i;
+            if (offset >= H * W) break;
+            uint index = input_offset(n, c + g * channels_per_group, offset);
+            sum += input_tensor.data[index];
+        }
+    }
+    group_sum[tid] = sum;
+    barrier();
+    for (uint stride = 128; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            group_sum[tid] += group_sum[tid + stride];
+        }
+        barrier();
+    }
+    float mu = group_sum[0] / (elements_per_group * channels_per_group);
+    barrier();
+    sum = 0.0f;
+    for (uint c = 0; c < channels_per_group; ++c) {
+        for (uint i = 0; i < elements_per_invocation; ++i) {
+            uint offset = tid * elements_per_invocation + i;
+            if (offset >= H * W) break;
+            uint index = input_offset(n, c + g * channels_per_group, offset);
+            sum += (input_tensor.data[index] - mu) * (input_tensor.data[index] - mu);
+        }
+    }
+    group_sum[tid] = sum;
+    barrier();
+    for (uint stride = 128; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            group_sum[tid] += group_sum[tid + stride];
+        }
+        barrier();
+    }
+    float sigma_2 = group_sum[0] / (elements_per_group * channels_per_group);
+    float sigma = sqrt(sigma_2 + group_norm_params.eps);
+    for (uint c = 0; c < channels_per_group; ++c) {
+        float alpha = weight_tensor.data[c + g * channels_per_group];
+        float beta = bias_tensor.data[c + g * channels_per_group];
+        for (uint i = 0; i < elements_per_invocation; ++i) {
+            uint offset = tid * elements_per_invocation + i;
+            if (offset >= H * W) break;
+            uint index = input_offset(n, c + g * channels_per_group, offset);
+            output_tensor.data[index] = (input_tensor.data[index] - mu) / sigma * alpha + beta;
+        }
+    }
+}

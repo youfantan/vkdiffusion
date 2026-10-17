@@ -42,7 +42,7 @@ namespace vkdiffusion
             return { M, N };
         }
 
-        std::vector<VkComputeTask> operator()(const Tensor& tensor_a, const Tensor& tensor_b, const Tensor& bias, Tensor& output, float alpha, float beta, bool trans_a, bool trans_b) const {
+        VkComputeTask operator()(const Tensor& tensor_a, const Tensor& tensor_b, const Tensor& bias, Tensor& output, float alpha, float beta, bool trans_a, bool trans_b) const {
             uint32_t M = trans_a ? tensor_a.GetShape()[1] : tensor_a.GetShape()[0];
             uint32_t K = trans_a ? tensor_a.GetShape()[0] : tensor_a.GetShape()[1];
             uint32_t N = trans_b ? tensor_b.GetShape()[0] : tensor_b.GetShape()[1];
@@ -65,15 +65,14 @@ namespace vkdiffusion
                 .trans_b = trans_b
             };
 
-            std::vector<VkComputeTask> tasks;
-            tasks.emplace_back("OpGEMM");
-            tasks.back().BindBuffer(0, tensor_a.GetGPUHandle())
+            VkComputeTask task("OpGEMM");
+            task.BindBuffer(0, tensor_a.GetGPUHandle())
                 .BindBuffer(1, tensor_b.GetGPUHandle())
                 .BindBuffer(2, bias.GetGPUHandle())
                 .BindBuffer(3, output.GetGPUHandle())
                 .PushConstant(&params, sizeof(GEMMParams))
                 .Dispatch((N + 15) / 16, (M + 15) / 16, 1);
-            return tasks;
+            return task;
         }
     };
 }

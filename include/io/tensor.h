@@ -98,9 +98,6 @@ namespace vkdiffusion
     class Tensor {
         friend TensorView;
 
-    public:
-
-    private:
         VkGRAMAllocator& allocator_;
         std::vector<uint32_t> shape_;
         std::vector<uint32_t> stride_;
@@ -123,8 +120,8 @@ namespace vkdiffusion
         }
 
         NO_COPY(Tensor);
-        Tensor(Tensor&& other) noexcept : allocator_(other.allocator_), shape_(std::move(other.shape_)), type_(other.type_), size_(other.size_), gpu_buffer_(other.gpu_buffer_), name_(std::move(other.name_)) {
-            other.gpu_buffer_ = nullptr;
+        Tensor(Tensor&& other) noexcept : allocator_(other.allocator_), shape_(std::move(other.shape_)), stride_(std::move(other.stride_)), type_(other.type_), size_(other.size_), gpu_buffer_(other.gpu_buffer_), name_(std::move(other.name_)) {            other.gpu_buffer_ = nullptr;
+
         }
         Tensor& operator=(TensorView&&) = delete;
 

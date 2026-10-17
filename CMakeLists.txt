@@ -37,6 +37,7 @@ add_executable(vkdiffusion
         include/op/op_linear.h
         include/op/op_SiLU.h
         include/diffusion/unet.h
+        include/op/op_GroupNorm.h
 )
 
 target_include_directories(vkdiffusion PUBLIC include)

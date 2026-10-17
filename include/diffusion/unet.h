@@ -4,7 +4,7 @@
 #include <io/tensor.h>
 #include <io/model.h>
 #include <op/op_SiLU.h>
-#include <op/op_linear.h>
+#include <op/op_Linear.h>
 
 
 namespace vkdiffusion

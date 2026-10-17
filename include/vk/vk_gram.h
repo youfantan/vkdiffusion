@@ -166,10 +166,7 @@ namespace vkdiffusion
                 }
             }
             std::erase_if(dying_buffers_, [&](auto w) {
-                for (auto h : erase_handles) {
-                    return h == w;
-                }
-                return false;
+                return std::find(erase_handles.begin(), erase_handles.end(), w) != erase_handles.end();
             });
         }
 

@@ -45,7 +45,7 @@ namespace vkdiffusion
             return { out_n, out_c, out_h, out_w };
         }
 
-        std::vector<VkComputeTask> operator()(const Tensor& input, const Tensor& kernel, const Tensor& bias, Tensor& output, uint32_t padding, uint32_t stride) {
+        VkComputeTask operator()(const Tensor& input, const Tensor& kernel, const Tensor& bias, Tensor& output, uint32_t padding, uint32_t stride) {
             uint32_t out_n = input.GetShape()[0];
             uint32_t out_c = kernel.GetShape()[0];
             uint32_t out_h = (input.GetShape()[2] + 2 * padding - kernel.GetShape()[2]) / stride + 1;
@@ -67,15 +67,14 @@ namespace vkdiffusion
                 .stride = stride,
                 ._padding = 0
             };
-            std::vector<VkComputeTask> tasks;
-            tasks.emplace_back("OpConv2d");
-            tasks.back().BindBuffer(0, input.GetGPUHandle())
+            VkComputeTask task("OpConv2d");
+            task.BindBuffer(0, input.GetGPUHandle())
                 .BindBuffer(1, kernel.GetGPUHandle())
                 .BindBuffer(2, bias.GetGPUHandle())
                 .BindBuffer(3, output.GetGPUHandle())
                 .PushConstant(&params, sizeof(Conv2dParams))
                 .Dispatch((out_w + 15) / 16, (out_h + 15) / 16, out_n * out_c);
-            return tasks;
+            return task;
         }
     };
 

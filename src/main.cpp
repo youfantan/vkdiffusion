@@ -1,7 +1,7 @@
 #include <vk/vk_framework.h>
 #include <io/model.h>
 #include <platform/win32.h>
-#include <../include/op/op_conv2d.h>
+#include <../include/op/op_Conv2d.h>
 #include <diffusion/unet.h>
 
 using namespace vkdiffusion;
