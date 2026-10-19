@@ -10,8 +10,9 @@ int main() {
     VkComputeFramework vkcf;
     SafetensorsLoader loader(vkcf.GetAllocator());
     Safetensors sd_1_5 = loader.Load("models/v1-5-pruned-emaonly.safetensors");
-    auto latent = LoadTensorFromFile(vkcf.GetAllocator(), TensorDataType::F32, { 1, 4, 64, 64 }, "case0/latent.f32.bin", 0, "Latent");
-    auto text_embedding = LoadTensorFromFile(vkcf.GetAllocator(), TensorDataType::F32, { 1, 77, 768 }, "case0/context.f32.bin", 0, "TextEmbedding");
+    UNet<TensorDataType::F32> unet(vkcf, sd_1_5);
+    auto latent = LoadTensorFromFile(vkcf.GetAllocator(), TensorDataType::F32, { 1, 4, 64, 64 }, "case0/latent.f32.bin", 0, "latent");
+    auto text_embedding = LoadTensorFromFile(vkcf.GetAllocator(), TensorDataType::F32, { 1, 77, 768 }, "case0/context.f32.bin", 0, "text_embedding");
     auto timestep_str = ReadFileIntoString("case0/timestep.i64.bin").value();
     uint64_t timestep = *reinterpret_cast<uint64_t*>(&timestep_str[0]);
     auto& input_blocks_0_0_weight = sd_1_5.LoadTensor("model.diffusion_model.input_blocks.0.0.weight");
@@ -20,17 +21,14 @@ int main() {
     auto& time_embed_0_bias = sd_1_5.LoadTensor("model.diffusion_model.time_embed.0.bias");
     auto& time_embed_2_weight = sd_1_5.LoadTensor("model.diffusion_model.time_embed.2.weight");
     auto& time_embed_2_bias = sd_1_5.LoadTensor("model.diffusion_model.time_embed.2.bias");
-    Tensor conv_in(vkcf.GetAllocator(), TensorDataType::F32, { 1, 320, 64, 64 }, "ConvIn");
-    UNet<TensorDataType::F32> unet(vkcf, sd_1_5);
     HighPerformanceCounter counter;
     counter.Start();
-    auto v = unet.TimestepEmbedding(static_cast<float>(timestep), 1, 320);
+    auto t_emb = unet.TimestepEmbedding(static_cast<float>(timestep), 1, 320);
+    auto conv_in = unet.ConvLatent(latent);
+    auto resnet_block = unet.ResNetBlock2D("model.diffusion_model.input_blocks.1.0", conv_in, t_emb, 320);
     counter.Stop();
-    std::cout << "TimeEmbedding time resuming: " << counter.GetDurationUs() << std::endl;
-    TensorView v_view(v);
+    std::cout << "ResNetBlock2D time resuming: " << counter.GetDurationUs() << std::endl;
+    TensorView v_view(resnet_block);
     v_view.Download();
-    v_view.DumpToFile("proj.f32.bin");
-
-
-
+    v_view.DumpToFile("resnet.f32.bin");
 }

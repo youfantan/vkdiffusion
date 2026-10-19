@@ -1,0 +1,52 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer TensorA {
+    float data[];
+} a_tensor;
+
+layout(std430, set = 0, binding = 1) readonly buffer TensorB {
+    float data[];
+} b_tensor;
+
+layout(std430, set = 0, binding = 2) buffer TensorOutput {
+    float data[];
+} output_tensor;
+
+layout(push_constant) uniform AddParams {
+    uvec4 output_shape;
+    uvec4 tensor_a_stride;
+    uvec4 tensor_b_stride;
+    uvec4 output_stride;
+} add_params;
+
+void main() {
+    uint N = add_params.output_shape.x;
+    uint C = add_params.output_shape.y;
+    uint H = add_params.output_shape.z;
+    uint W = add_params.output_shape.w;
+
+    uint w = gl_GlobalInvocationID.x;
+    uint h = gl_GlobalInvocationID.y;
+    uint nc = gl_WorkGroupID.z;
+    if (w >= W || h >= H || nc >= N * C) return;
+
+    uint n = nc / C;
+    uint c = nc - n * C;
+
+    uint a_index = n * add_params.tensor_a_stride.x +
+                   c * add_params.tensor_a_stride.y +
+                   h * add_params.tensor_a_stride.z +
+                   w * add_params.tensor_a_stride.w;
+    uint b_index = n * add_params.tensor_b_stride.x +
+                   c * add_params.tensor_b_stride.y +
+                   h * add_params.tensor_b_stride.z +
+                   w * add_params.tensor_b_stride.w;
+    uint o_index = n * add_params.output_stride.x +
+                   c * add_params.output_stride.y +
+                   h * add_params.output_stride.z +
+                   w * add_params.output_stride.w;
+
+    output_tensor.data[o_index] = a_tensor.data[a_index] + b_tensor.data[b_index];
+}

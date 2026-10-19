@@ -1,0 +1,25 @@
+#version 450
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer TensorA {
+    float data[];
+} a_tensor;
+
+layout(std430, set = 0, binding = 1) readonly buffer TensorB {
+    float data[];
+} b_tensor;
+
+layout(std430, set = 0, binding = 2) buffer TensorOutput {
+    float data[];
+} output_tensor;
+
+layout(push_constant) uniform AddParams {
+    uint size;
+} add_params;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= add_params.size) return;
+    output_tensor.data[index] = a_tensor.data[index] + b_tensor.data[index];
+}
