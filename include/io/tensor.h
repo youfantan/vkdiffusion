@@ -177,7 +177,7 @@ namespace vkdiffusion
             auto ptr = cpu_buffer_->GetMapped();
             std::ifstream input(file, std::ios::in | std::ios::binary);
             input.seekg(static_cast<std::istream::off_type>(offset), std::ios::beg);
-            if (!input) throw std::runtime_error(std::format("Cannot load tensor from file {} because file not exists", file));
+            if (!input) MLOG_FATAL("Cannot load tensor from file {} because file not exists", file);
             input.read(static_cast<char*>(ptr), static_cast<std::streamsize>(tensor_.size_));
         }
 
@@ -194,15 +194,15 @@ namespace vkdiffusion
         template<TensorDataType _DT>
         TensorDataTypeTraits<_DT>::Type& At(std::initializer_list<uint32_t> index) {
             using AccessType = TensorDataTypeTraits<_DT>::Type;
-            if (_DT != tensor_.type_) throw std::runtime_error(std::format("TensorType of Tensor unmatched while access TensorView: Tensor {} / Tensor View {}", ParseTensorTypeAlias(tensor_.type_), TensorDataTypeTraits<_DT>::StandardTypeAlias));
+            if (_DT != tensor_.type_) MLOG_FATAL("TensorType of Tensor unmatched while access TensorView: Tensor {} / Tensor View {}", ParseTensorTypeAlias(tensor_.type_), TensorDataTypeTraits<_DT>::StandardTypeAlias);
             if (index.size() != tensor_.shape_.size()) {
-                throw std::runtime_error(std::format("TensorView access error: shapes not equals. Access {}, Tensor {}", index.size(), tensor_.shape_.size()));
+                MLOG_FATAL("TensorView access error: shapes not equals. Access {}, Tensor {}", index.size(), tensor_.shape_.size());
             }
             size_t offset = 0;
             for (auto i = 0; i < index.size(); ++i) {
                 offset += index.data()[i] * tensor_.stride_[i];
             }
-            if (offset * sizeof(TensorDataTypeTraits<_DT>::Type) >= tensor_.size_) throw std::runtime_error(std::format("Tensor View access out of range: index {} / size {}", offset, tensor_.size_));
+            if (offset * sizeof(TensorDataTypeTraits<_DT>::Type) >= tensor_.size_) MLOG_FATAL("Tensor View access out of range: index {} / size {}", offset, tensor_.size_);
             return static_cast<AccessType*>(cpu_buffer_->GetMapped())[offset];
         }
 
@@ -210,10 +210,9 @@ namespace vkdiffusion
         const TensorDataTypeTraits<_DT>::Type& At(std::initializer_list<uint32_t> index) const {
             using AccessType = TensorDataTypeTraits<_DT>::Type;
 
-            if (_DT != tensor_.type_) throw std::runtime_error(std::format("TensorType of Tensor unmatched while access TensorView: Tensor {} / Tensor View {}", ParseTensorTypeAlias(tensor_.type_), TensorDataTypeTraits<_DT>::StandardTypeAlias));
+            if (_DT != tensor_.type_) MLOG_FATAL("TensorType of Tensor unmatched while access TensorView: Tensor {} / Tensor View {}", ParseTensorTypeAlias(tensor_.type_), TensorDataTypeTraits<_DT>::StandardTypeAlias);
             if (index.size() != tensor_.shape_.size()) {
-                throw std::runtime_error(std::format("TensorView access error: shapes not equals. Access {}, Tensor {}",
-                                                     index.size(), tensor_.shape_.size()));
+                MLOG_FATAL("TensorView access error: shapes not equals. Access {}, Tensor {}", index.size(), tensor_.shape_.size());
             }
             size_t offset = 0;
             for (auto i = 0; i < index.size(); ++i) {

@@ -44,8 +44,7 @@ namespace vkdiffusion
         }
 
         VkComputePipeline& CreatePipeline(const std::string& name) {
-            if (pipelines_.contains(name)) throw std::runtime_error(
-                std::format("Compute Pipeline {} already exists.", name));
+            if (pipelines_.contains(name)) MLOG_FATAL("Compute Pipeline {} already exists.", name);
             auto [it, ok] = pipelines_.try_emplace(name, initializer_);
             return it->second;
         }
@@ -72,7 +71,7 @@ namespace vkdiffusion
                 auto& task = tasks[i];
                 auto pipeline_found = pipelines_.find(task.GetPipelineName());
                 if (pipeline_found == pipelines_.end()) {
-                    throw std::runtime_error(std::format("Compute Pipeline {} not found.", task.GetPipelineName()));
+                    MLOG_FATAL("Compute Pipeline {} not found.", task.GetPipelineName());
                 }
                 VkComputePipeline& pipeline = pipeline_found->second;
                 VkDescriptorSet descriptor_set = VK_NULL_HANDLE;

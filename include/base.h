@@ -19,7 +19,7 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #define NOMINMAX
 #include <Windows.h>
-
+#include <microtrace.h>
 #endif
 
 #include <vulkan/vulkan.h>

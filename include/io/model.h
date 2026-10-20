@@ -38,7 +38,7 @@ namespace vkdiffusion
         Safetensors& operator=(Safetensors&&) = delete;
 
         Tensor& LoadTensor(const std::string& name) {
-            if (!tensors_index_.contains(name)) throw std::runtime_error(std::format("Tensor {} not exists", name));
+            if (!tensors_index_.contains(name)) MLOG_FATAL("Tensor {} not exists", name);
             auto& index = tensors_index_[name];
             if (!tensors_map_.contains(name)) {
                 auto [it, ok] = tensors_map_.try_emplace(name, allocator_, index.data_type, index.shapes, name);
@@ -62,7 +62,7 @@ namespace vkdiffusion
             using namespace nlohmann;
             std::ifstream input(path, std::ios::in | std::ios::binary);
             if (!input) {
-                throw std::runtime_error(std::format("Cannot load safetensor because file {} not exists", path));
+                MLOG_FATAL("Cannot load safetensor because file {} not exists");
             }
             uint64_t header_size {};
             input.read(reinterpret_cast<char*>(&header_size), 8);
@@ -78,10 +78,10 @@ namespace vkdiffusion
                     std::vector<uint32_t> shapes;
                     for (uint32_t s : shape) shapes.push_back(s);
                     auto [it, success] = safetensors.tensors_index_.try_emplace(name, name, 8 + header_size + off, ParseTensorTypeWithSafeTensorAlias(tensor["dtype"]), std::move(shapes));
-                    if (!success) throw std::runtime_error(std::format("Repeated Tensor {} in the safetensors file {}", name, path));
+                    if (!success) MLOG_FATAL("Repeated Tensor {} in the safetensors file {}", name, path);
                 }
             }
-            std::cout << std::format("safetensor {} is loaded into GRAM", path) << std::endl;
+            MLOG_INFO("safetensor {} is loaded into GRAM", path);
             return safetensors;
         }
     };

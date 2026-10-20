@@ -51,28 +51,28 @@ namespace vkdiffusion
         template<typename Window>
         void Create(Window& window) {
             if (vk_dev_typ_ != Type::Graphics && vk_dev_typ_ != Type::Graphics_Compute) {
-                throw std::runtime_error("Only Graphics or Graphics_Compute type device could call Create(Window)");
+                MLOG_FATAL("Only Graphics or Graphics_Compute type device could call Create(Window)");
             }
             CreateCommonInstance();
             surface_ = window.CreateSurface(instance_);
             uint32_t phdev_count;
             VKCHECK(vkEnumeratePhysicalDevices(instance_, &phdev_count, nullptr));
             if (phdev_count == 0) {
-                throw std::runtime_error("No available physical devices found");
+                MLOG_FATAL("No available physical devices found");
             }
             physical_devices_.resize(phdev_count);
             VKCHECK(vkEnumeratePhysicalDevices(instance_, &phdev_count, &physical_devices_[0]));
-            std::cout << "Detected physical devices: " << std::endl;
+            MLOG_INFO("Detected physical devices: ");
             FORI(phdev_count) {
                 VkPhysicalDeviceProperties prop;
                 vkGetPhysicalDeviceProperties(physical_devices_[i], &prop);
-                std::cout << std::format("{}. {} [Vulkan API Version {}.{}.{}]", i, prop.deviceName, VK_API_VERSION_MAJOR(prop.apiVersion), VK_API_VERSION_MINOR(prop.apiVersion), VK_API_VERSION_PATCH(prop.apiVersion)) << std::endl;
+                MLOG_INFO("{}. {} [Vulkan API Version {}.{}.{}]", i, prop.deviceName, VK_API_VERSION_MAJOR(prop.apiVersion), VK_API_VERSION_MINOR(prop.apiVersion), VK_API_VERSION_PATCH(prop.apiVersion));
             }
             selected_physical_device_ = physical_devices_[0];
             uint32_t queue_count;
             vkGetPhysicalDeviceQueueFamilyProperties(selected_physical_device_, &queue_count, nullptr);
             if (queue_count == 0) {
-                throw std::runtime_error("Queue family count is 0");
+                MLOG_FATAL("Queue family count is 0");
             }
             queue_family_properties_.resize(queue_count);
             vkGetPhysicalDeviceQueueFamilyProperties(selected_physical_device_, &queue_count, &queue_family_properties_[0]);
@@ -88,7 +88,7 @@ namespace vkdiffusion
                 }
             }
             if (selected_queue_family == -1) {
-               throw std::runtime_error("No available queue family found");
+               MLOG_FATAL("No available queue family found");
             }
             float priority = 1.0f;
             VkDeviceQueueCreateInfo queue_create_info {
@@ -176,27 +176,27 @@ namespace vkdiffusion
 
         void Create() {
             if (vk_dev_typ_ != Type::Compute) {
-                throw std::runtime_error("Only Compute type device could call Create()");
+                MLOG_FATAL("Only Compute type device could call Create()");
             }
             CreateCommonInstance();
             uint32_t phdev_count;
             VKCHECK(vkEnumeratePhysicalDevices(instance_, &phdev_count, nullptr));
             if (phdev_count == 0) {
-                throw std::runtime_error("No available physical devices found");
+                MLOG_FATAL("No available physical devices found");
             }
             physical_devices_.resize(phdev_count);
             VKCHECK(vkEnumeratePhysicalDevices(instance_, &phdev_count, &physical_devices_[0]));
-            std::cout << "Detected physical devices: " << std::endl;
+            MLOG_INFO("Detected physical devices: ");
             FORI(phdev_count) {
                 VkPhysicalDeviceProperties prop;
                 vkGetPhysicalDeviceProperties(physical_devices_[i], &prop);
-                std::cout << std::format("{}. {} [Vulkan API Version {}.{}.{}]", i, prop.deviceName, VK_API_VERSION_MAJOR(prop.apiVersion), VK_API_VERSION_MINOR(prop.apiVersion), VK_API_VERSION_PATCH(prop.apiVersion)) << std::endl;
+                MLOG_INFO("{}. {} [Vulkan API Version {}.{}.{}]", i, prop.deviceName, VK_API_VERSION_MAJOR(prop.apiVersion), VK_API_VERSION_MINOR(prop.apiVersion), VK_API_VERSION_PATCH(prop.apiVersion));
             }
             selected_physical_device_ = physical_devices_[0];
             uint32_t queue_count;
             vkGetPhysicalDeviceQueueFamilyProperties(selected_physical_device_, &queue_count, nullptr);
             if (queue_count == 0) {
-                throw std::runtime_error("Queue family count is 0");
+                MLOG_FATAL("Queue family count is 0");
             }
             queue_family_properties_.resize(queue_count);
             vkGetPhysicalDeviceQueueFamilyProperties(selected_physical_device_, &queue_count, &queue_family_properties_[0]);
@@ -207,7 +207,7 @@ namespace vkdiffusion
                 }
             }
             if (selected_queue_family == -1) {
-                throw std::runtime_error("No available queue family found");
+                MLOG_FATAL("No available queue family found");
             }
             float priority = 1.0f;
             VkDeviceQueueCreateInfo queue_create_info {

@@ -99,7 +99,7 @@ namespace vkdiffusion
                         return i;
                     }
                 }
-                throw std::runtime_error("No matched memory type bits found while creating buffer");
+                MLOG_FATAL("No matched memory type bits found while creating buffer");
             };
             VkMemoryAllocateInfo memory_allocate_info {
                 .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -124,11 +124,11 @@ namespace vkdiffusion
             }
             auto name = handle->GetName().empty() ? "[Anonymous]" : handle->GetName();
             if (handle->GetProperty() & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-                std::cout << std::format("Local VkBuffer '{}' is released", name) << std::endl;
+                MLOG_TRACE("Local VkBuffer '{}' is released", name);
             } else if (handle->GetProperty() & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-                std::cout << std::format("Remote VkBuffer '{}' is released", name) << std::endl;
+                MLOG_TRACE("Remote VkBuffer '{}' is released", name);
             } else {
-                std::cout << std::format("Unknown VkBuffer '{}' is released", name) << std::endl;
+                MLOG_TRACE("Unknown VkBuffer '{}' is released", name);
             }
             vkFreeMemory(vk_init_.GetVkDevice(), handle->memory_, nullptr);
             vkDestroyBuffer(vk_init_.GetVkDevice(), handle->buffer_, nullptr);
@@ -154,7 +154,7 @@ namespace vkdiffusion
             std::erase_if(gram_buffers_, [&](auto h) { return h == handle; });
             dying_buffers_.push_back(handle);
             auto name = handle->GetName().empty() ? "[Anonymous]" : handle->GetName();
-            std::cout << std::format("VkBuffer '{}' is dying", name) << std::endl;
+            MLOG_TRACE("VkBuffer '{}' is expired", name);
         }
 
         void CleanUp() {

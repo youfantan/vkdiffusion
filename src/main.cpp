@@ -7,6 +7,13 @@
 using namespace vkdiffusion;
 
 int main() {
+    MicroTrace::InitializeProfile profile{
+        .enable_console = true,
+        .enable_console_ansi_out = true,
+        .console_filter_level = MicroTrace::Level::DEBUG,
+        .log_file_name = "vkdiffusion.log",
+    };
+    MicroTrace::Initialize(profile);
     VkComputeFramework vkcf;
     SafetensorsLoader loader(vkcf.GetAllocator());
     Safetensors sd_1_5 = loader.Load("models/v1-5-pruned-emaonly.safetensors");
@@ -27,7 +34,7 @@ int main() {
     auto conv_in = unet.ConvLatent(latent);
     auto resnet_block = unet.ResNetBlock2D("model.diffusion_model.input_blocks.1.0", conv_in, t_emb, 320);
     counter.Stop();
-    std::cout << "ResNetBlock2D time resuming: " << counter.GetDurationUs() << std::endl;
+    MLOG_INFO("ResNetBlock2D time resuming: {}", counter.GetDurationUs());
     TensorView v_view(resnet_block);
     v_view.Download();
     v_view.DumpToFile("resnet.f32.bin");
