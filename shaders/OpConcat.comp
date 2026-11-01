@@ -1,0 +1,64 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer TensorA {
+    float data[];
+} a_tensor;
+
+layout(std430, set = 0, binding = 1) readonly buffer TensorB {
+    float data[];
+} b_tensor;
+
+layout(std430, set = 0, binding = 2) buffer TensorOutput {
+    float data[];
+} output_tensor;
+
+layout(push_constant) uniform ConcatParams {
+    uvec4 a_shape; // [N, C1, H, W]
+    uvec4 a_stride;
+    uvec4 b_shape; // [N, C2, H, W]
+    uvec4 b_stride;
+    uvec4 output_stride;
+} concat_params;
+
+void main() {
+    const uint N = concat_params.a_shape.x;
+    const uint C1 = concat_params.a_shape.y;
+    const uint C2 = concat_params.b_shape.y;
+    const uint H = concat_params.a_shape.z;
+    const uint W = concat_params.a_shape.w;
+    const uint Co = C1 + C2;
+
+    const uint x = gl_GlobalInvocationID.x;
+    const uint y = gl_GlobalInvocationID.y;
+    const uint nc = gl_GlobalInvocationID.z;
+    if (x >= W || y >= H || nc >= N * Co) {
+        return;
+    }
+
+    const uint n = nc / Co;
+    const uint c = nc % Co;
+    const uint output_index =
+        n * concat_params.output_stride.x +
+        c * concat_params.output_stride.y +
+        y * concat_params.output_stride.z +
+        x * concat_params.output_stride.w;
+
+    if (c < C1) {
+        const uint input_index =
+            n * concat_params.a_stride.x +
+            c * concat_params.a_stride.y +
+            y * concat_params.a_stride.z +
+            x * concat_params.a_stride.w;
+        output_tensor.data[output_index] = a_tensor.data[input_index];
+    } else {
+        const uint bc = c - C1;
+        const uint input_index =
+            n * concat_params.b_stride.x +
+            bc * concat_params.b_stride.y +
+            y * concat_params.b_stride.z +
+            x * concat_params.b_stride.w;
+        output_tensor.data[output_index] = b_tensor.data[input_index];
+    }
+}

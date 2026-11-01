@@ -1,0 +1,55 @@
+#version 450
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer Input {
+    float data[];
+} input_tensor;
+
+layout(std430, set = 0, binding = 1) buffer Output {
+    float data[];
+} output_tensor;
+
+layout(push_constant) uniform UpSample2xParams {
+    uvec4 input_shape; // [N, C, H, W]
+    uvec4 input_stride;
+    uvec4 output_stride; // [N, C, 2H, 2W]
+} upsample2x_params;
+
+void main() {
+    const uint H = upsample2x_params.input_shape.z;
+    const uint W = upsample2x_params.input_shape.w;
+
+    const uint n = gl_WorkGroupID.x;
+    const uint c = gl_WorkGroupID.y;
+    const uint tid = gl_LocalInvocationIndex;
+    const uint spatial_size = H * W;
+    for (uint index = tid; index < spatial_size; index += 256) {
+        const uint y = index / W;
+        const uint x = index % W;
+        const uint input_index = n * upsample2x_params.input_stride.x +
+                                c * upsample2x_params.input_stride.y +
+                                y * upsample2x_params.input_stride.z +
+                                x * upsample2x_params.input_stride.w;
+        const uint output_index_a = n * upsample2x_params.output_stride.x +
+                                c * upsample2x_params.output_stride.y +
+                                (2 * y) * upsample2x_params.output_stride.z +
+                                (2 * x) * upsample2x_params.output_stride.w;
+        const uint output_index_b = n * upsample2x_params.output_stride.x +
+                                c * upsample2x_params.output_stride.y +
+                                (2 * y + 1) * upsample2x_params.output_stride.z +
+                                (2 * x) * upsample2x_params.output_stride.w;
+        const uint output_index_c = n * upsample2x_params.output_stride.x +
+                                c * upsample2x_params.output_stride.y +
+                                (2 * y) * upsample2x_params.output_stride.z +
+                                (2 * x + 1) * upsample2x_params.output_stride.w;
+        const uint output_index_d = n * upsample2x_params.output_stride.x +
+                                c * upsample2x_params.output_stride.y +
+                                (2 * y + 1) * upsample2x_params.output_stride.z +
+                                (2 * x + 1) * upsample2x_params.output_stride.w;
+        output_tensor.data[output_index_a] = input_tensor.data[input_index];
+        output_tensor.data[output_index_b] = input_tensor.data[input_index];
+        output_tensor.data[output_index_c] = input_tensor.data[input_index];
+        output_tensor.data[output_index_d] = input_tensor.data[input_index];
+    }
+}

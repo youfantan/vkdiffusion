@@ -1,0 +1,48 @@
+#version 450
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer Input {
+    float data[];
+} input_tensor;
+
+layout(std430, set = 0, binding = 1) buffer Output {
+    float data[];
+} output_tensor;
+
+layout(push_constant) uniform GEGLUParams {
+    uint R;
+    uint F;
+} geglu_params;
+
+// Abramowitz-Stegun 7.1.26 erf approximation.
+// Vulkan GLSL 4.50 does not guarantee the built-in erf() used by the CPU reference.
+float erf_approx(float x) {
+    const float sign = x < 0.0 ? -1.0 : 1.0;
+    const float ax = abs(x);
+    const float t = 1.0 / (1.0 + 0.3275911 * ax);
+    const float poly =
+        (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t;
+    return sign * (1.0 - poly * exp(-ax * ax));
+}
+
+float gelu(float x) {
+    return 0.5 * x * (1.0 + erf_approx(x * 0.7071067811865476));
+}
+
+void main() {
+    const uint R = geglu_params.R;
+    const uint F = geglu_params.F;
+    const uint Total = R * F;
+
+    const uint index = gl_GlobalInvocationID.x;
+
+    if (index >= Total) return;
+
+    uint row = index / F;
+    uint col = index % F;
+    uint base = row * 2 * F + col;
+    float value = input_tensor.data[base];
+    float gate = input_tensor.data[base + F];
+    output_tensor.data[index] = value * gelu(gate);
+}

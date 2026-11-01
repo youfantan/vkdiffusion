@@ -32,11 +32,11 @@ namespace vkdiffusion
             }
         }
 
-        static std::vector<uint32_t> GetResultShape(const Tensor& input, const Tensor& weight, const Tensor& bias, uint32_t padding, uint32_t stride) {
+        static std::vector<uint32_t> GetResultShape(const Tensor& input, const Tensor& weight, const Tensor& bias, uint32_t group, float eps) {
             return input.GetShape();
         }
 
-        VkComputeTask operator()(const Tensor& input, const Tensor& weight, const Tensor& bias, Tensor& output, uint32_t group) {
+        VkComputeTask operator()(const Tensor& input, const Tensor& weight, const Tensor& bias, Tensor& output, uint32_t group, float eps) {
             const uint32_t N = input.GetShape()[0];
             const uint32_t G = group;
             GroupNormParams params {
@@ -44,7 +44,7 @@ namespace vkdiffusion
                 .input_stride = { input.GetStride()[0], input.GetStride()[1], input.GetStride()[2], input.GetStride()[3] },
                 .weight_shape = weight.GetShape()[0],
                 .groups = G,
-                .eps = 1e-5
+                .eps = eps
             };
             VkComputeTask task("OpGroupNorm");
             task.BindBuffer(0, input.GetGPUHandle())

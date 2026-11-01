@@ -1,0 +1,98 @@
+#version 450
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer Query {
+    float data[];
+} query_tensor;
+
+layout(std430, set = 0, binding = 1) readonly buffer Key {
+    float data[];
+} key_tensor;
+
+layout(std430, set = 0, binding = 2) readonly buffer Value {
+    float data[];
+} value_tensor;
+
+layout(std430, set = 0, binding = 3) buffer Output {
+    float data[];
+} output_tensor;
+
+layout(push_constant) uniform AttentionParams {
+    uvec4 query_shape; // [B, Lq, C]
+    uvec4 query_stride;
+    uvec4 key_shape; // [B, Lk, C]
+    uvec4 key_stride;
+    uint heads;
+    float scale;
+} attention_params;
+
+shared float scores[4096];
+shared float reduce[256];
+
+void main() {
+    const uint b = gl_WorkGroupID.x;
+    const uint q = gl_WorkGroupID.y;
+    const uint h = gl_WorkGroupID.z;
+    const uint tid = gl_LocalInvocationIndex;
+
+    const uint B = attention_params.query_shape.x;
+    const uint Lq = attention_params.query_shape.y;
+    const uint Lk = attention_params.key_shape.y;
+    const uint C = attention_params.query_shape.z;
+    const uint H = attention_params.heads;
+    const uint D = C / H;
+    const float scale = attention_params.scale;
+
+    if (q >= Lq || h >= H) {
+        return;
+    }
+
+    const uint head_offset = h * D;
+    const uint q_base = b * attention_params.query_stride.x + q * attention_params.query_stride.y + head_offset;
+    const uint o_base = q_base;
+    float local_max = -3.402823466e+38;
+    for (uint j = tid; j < Lk; j += 256) {
+        const uint k_base = b * attention_params.key_stride.x + j * attention_params.key_stride.y + head_offset;
+        float dot = 0.0;
+        for (uint d = 0; d < D; ++d) {
+            dot += query_tensor.data[q_base + d] * key_tensor.data[k_base + d];
+        }
+        const float score = dot * scale;
+        scores[j] = score;
+        local_max = max(local_max, score);
+    }
+    reduce[tid] = local_max;
+    barrier();
+    for (uint stride = 256 / 2u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) {
+            reduce[tid] = max(reduce[tid], reduce[tid + stride]);
+        }
+        barrier();
+    }
+    const float max_score = reduce[0];
+    barrier();
+    float local_sum = 0.0;
+    for (uint j = tid; j < Lk; j += 256) {
+        const float weight = exp(scores[j] - max_score);
+        scores[j] = weight;
+        local_sum += weight;
+    }
+    reduce[tid] = local_sum;
+    barrier();
+    for (uint stride = 256 / 2u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) {
+            reduce[tid] += reduce[tid + stride];
+        }
+        barrier();
+    }
+    const float sum = reduce[0];
+    for (uint d = tid; d < D; d += 256) {
+        float accumulation = 0.0;
+        for (uint j = 0; j < Lk; ++j) {
+            const uint v_base = b * attention_params.key_stride.x + j * attention_params.key_stride.y + head_offset;
+            accumulation += scores[j] * value_tensor.data[v_base + d];
+        }
+        output_tensor.data[o_base + d] = accumulation / sum;
+    }
+}

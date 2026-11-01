@@ -19,12 +19,15 @@ layout(std430, set = 0, binding = 3) buffer TensorOutput {
 } output_tensor;
 
 layout(push_constant) uniform GEMMParams {
-    uvec2 tensor_a_shape; // [M, K] or [K, M]
-    uvec2 tensor_a_stride;
+    uvec4 tensor_a_shape; // 2D: [M,K] / [K,M], 3D: [B,L,K], 4D NCHW: [B,K,H,W]
+    uvec4 tensor_a_stride;
     uvec2 tensor_b_shape; // [K, N] or [N, K]
     uvec2 tensor_b_stride;
-    uvec2 output_shape; // [M, N]
-    uvec2 output_stride;
+    uvec4 output_shape; // 2D: [M,N], 3D: [B,L,N], 4D NCHW: [B,N,H,W]
+    uvec4 output_stride;
+    uint tensor_a_rank;
+    uint output_rank;
+    uint batch;
     float alpha;
     float beta;
     uint bias_shape;
@@ -33,27 +36,86 @@ layout(push_constant) uniform GEMMParams {
 } gemm_params;
 
 void main() {
-    uint M = gemm_params.trans_a == 0 ? gemm_params.tensor_a_shape.x : gemm_params.tensor_a_shape.y;
-    uint K = gemm_params.trans_a == 0 ? gemm_params.tensor_a_shape.y : gemm_params.tensor_a_shape.x;
-    uint N = gemm_params.trans_b == 0 ? gemm_params.tensor_b_shape.y : gemm_params.tensor_b_shape.x;
-    float alpha = gemm_params.alpha;
-    float beta = gemm_params.beta;
-    uint oX = gl_GlobalInvocationID.x;
-    uint oY = gl_GlobalInvocationID.y;
-    if (oX >= N || oY >= M) return;
+    const uint batch_index = gl_WorkGroupID.z;
+    const uint n = gl_GlobalInvocationID.x;
+    const uint m = gl_GlobalInvocationID.y;
+    const uint N = gemm_params.trans_b == 0 ? gemm_params.tensor_b_shape.y : gemm_params.tensor_b_shape.x;
+
+    uint M;
+    uint K;
+    if (gemm_params.tensor_a_rank == 2) {
+        M = gemm_params.trans_a == 0 ? gemm_params.tensor_a_shape.x : gemm_params.tensor_a_shape.y;
+        K = gemm_params.trans_a == 0 ? gemm_params.tensor_a_shape.y : gemm_params.tensor_a_shape.x;
+    } else if (gemm_params.tensor_a_rank == 3) {
+        M = gemm_params.tensor_a_shape.y;
+        K = gemm_params.tensor_a_shape.z;
+    } else {
+        M = gemm_params.tensor_a_shape.z * gemm_params.tensor_a_shape.w;
+        K = gemm_params.tensor_a_shape.y;
+    }
+
+    if (n >= N || m >= M || batch_index >= gemm_params.batch) return;
+
     float accumulation = 0;
-    uint o_index = gemm_params.output_stride.x * oY + gemm_params.output_stride.y * oX;
     for (uint k = 0; k < K; ++k) {
-        uint a_index = gemm_params.trans_a == 0
-        ? gemm_params.tensor_a_stride.x * oY + gemm_params.tensor_a_stride.y * k
-        : gemm_params.tensor_a_stride.x * k + gemm_params.tensor_a_stride.y * oY;
+        uint a_index;
+        if (gemm_params.tensor_a_rank == 2) {
+            a_index = gemm_params.trans_a == 0
+                ? gemm_params.tensor_a_stride.x * m + gemm_params.tensor_a_stride.y * k
+                : gemm_params.tensor_a_stride.x * k + gemm_params.tensor_a_stride.y * m;
+        } else if (gemm_params.tensor_a_rank == 3) {
+            a_index =
+                batch_index * gemm_params.tensor_a_stride.x +
+                m * gemm_params.tensor_a_stride.y +
+                k * gemm_params.tensor_a_stride.z;
+        } else {
+            const uint H = gemm_params.tensor_a_shape.z;
+            const uint W = gemm_params.tensor_a_shape.w;
+            const uint h = m / W;
+            const uint w = m % W;
+            a_index =
+                batch_index * gemm_params.tensor_a_stride.x +
+                k * gemm_params.tensor_a_stride.y +
+                h * gemm_params.tensor_a_stride.z +
+                w * gemm_params.tensor_a_stride.w;
+        }
         uint b_index = gemm_params.trans_b == 0
-        ? gemm_params.tensor_b_stride.x * k + gemm_params.tensor_b_stride.y * oX
-        : gemm_params.tensor_b_stride.x * oX + gemm_params.tensor_b_stride.y * k;
+        ? gemm_params.tensor_b_stride.x * k + gemm_params.tensor_b_stride.y * n
+        : gemm_params.tensor_b_stride.x * n + gemm_params.tensor_b_stride.y * k;
         accumulation += a_tensor.data[a_index] * b_tensor.data[b_index];
     }
-    accumulation *= alpha;
-    if (beta != 0.0) accumulation += output_tensor.data[o_index] * beta;
-    float bias = gemm_params.bias_shape == 0 ? 0 : bias_tensor.data[oX];
+
+    uint o_index;
+    if (gemm_params.output_rank == 2) {
+        o_index =
+            m * gemm_params.output_stride.x +
+            n * gemm_params.output_stride.y;
+    } else if (gemm_params.output_rank == 3) {
+        o_index =
+            batch_index * gemm_params.output_stride.x +
+            m * gemm_params.output_stride.y +
+            n * gemm_params.output_stride.z;
+    } else {
+        const uint H = gemm_params.tensor_a_rank == 4
+            ? gemm_params.tensor_a_shape.z
+            : gemm_params.output_shape.z;
+        const uint W = gemm_params.tensor_a_rank == 4
+            ? gemm_params.tensor_a_shape.w
+            : gemm_params.output_shape.w;
+        const uint h = m / W;
+        const uint w = m % W;
+        o_index =
+            batch_index * gemm_params.output_stride.x +
+            n * gemm_params.output_stride.y +
+            h * gemm_params.output_stride.z +
+            w * gemm_params.output_stride.w;
+    }
+
+    accumulation *= gemm_params.alpha;
+    if (gemm_params.beta != 0.0) accumulation += output_tensor.data[o_index] * gemm_params.beta;
+    float bias = 0.0;
+    if (gemm_params.bias_shape != 0) {
+        bias = bias_tensor.data[n];
+    }
     output_tensor.data[o_index] = accumulation + bias;
 }

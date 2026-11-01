@@ -42,6 +42,10 @@ add_executable(vkdiffusion
         include/op/op_BroadcastAdd.h
         include/op/op_LayerNorm.h
         include/microtrace.h
+        include/op/op_Attention.h
+        include/op/op_UpSample2x.h
+        include/op/op_GEGLU.h
+        include/op/op_Concat.h
 )
 
 target_include_directories(vkdiffusion PUBLIC include)
@@ -50,6 +54,7 @@ target_include_directories(vkdiffusion PRIVATE ${SHADERC_INCLUDE_DIR})
 target_link_libraries(vkdiffusion PRIVATE Vulkan::Vulkan
         optimized "${SHADERC_LIBRARY_RELEASE}"
         debug "${SHADERC_LIBRARY_DEBUG}"
+        dbghelp
 )
 
 target_compile_definitions(vkdiffusion PRIVATE UNICODE)

@@ -193,30 +193,32 @@ namespace vkdiffusion
 
         template<TensorDataType _DT>
         TensorDataTypeTraits<_DT>::Type& At(std::initializer_list<uint32_t> index) {
-            using AccessType = TensorDataTypeTraits<_DT>::Type;
+            using AccessType = typename TensorDataTypeTraits<_DT>::Type;
             if (_DT != tensor_.type_) MLOG_FATAL("TensorType of Tensor unmatched while access TensorView: Tensor {} / Tensor View {}", ParseTensorTypeAlias(tensor_.type_), TensorDataTypeTraits<_DT>::StandardTypeAlias);
             if (index.size() != tensor_.shape_.size()) {
                 MLOG_FATAL("TensorView access error: shapes not equals. Access {}, Tensor {}", index.size(), tensor_.shape_.size());
             }
             size_t offset = 0;
-            for (auto i = 0; i < index.size(); ++i) {
-                offset += index.data()[i] * tensor_.stride_[i];
+            uint32_t i = 0;
+            for (auto value : index) {
+                offset += value * tensor_.stride_[i++];
             }
-            if (offset * sizeof(TensorDataTypeTraits<_DT>::Type) >= tensor_.size_) MLOG_FATAL("Tensor View access out of range: index {} / size {}", offset, tensor_.size_);
+            if (offset * sizeof(typename TensorDataTypeTraits<_DT>::Type) >= tensor_.size_) MLOG_FATAL("Tensor View access out of range: index {} / size {}", offset, tensor_.size_);
             return static_cast<AccessType*>(cpu_buffer_->GetMapped())[offset];
         }
 
         template<TensorDataType _DT>
         const TensorDataTypeTraits<_DT>::Type& At(std::initializer_list<uint32_t> index) const {
-            using AccessType = TensorDataTypeTraits<_DT>::Type;
+            using AccessType = typename TensorDataTypeTraits<_DT>::Type;
 
             if (_DT != tensor_.type_) MLOG_FATAL("TensorType of Tensor unmatched while access TensorView: Tensor {} / Tensor View {}", ParseTensorTypeAlias(tensor_.type_), TensorDataTypeTraits<_DT>::StandardTypeAlias);
             if (index.size() != tensor_.shape_.size()) {
                 MLOG_FATAL("TensorView access error: shapes not equals. Access {}, Tensor {}", index.size(), tensor_.shape_.size());
             }
             size_t offset = 0;
-            for (auto i = 0; i < index.size(); ++i) {
-                offset += index.data()[i] * tensor_.stride_[i];
+            uint32_t i = 0;
+            for (auto value : index) {
+                offset += value * tensor_.stride_[i++];
             }
             return static_cast<const AccessType*>(cpu_buffer_->GetMapped())[offset];
         }

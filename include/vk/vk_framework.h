@@ -61,10 +61,10 @@ namespace vkdiffusion
         uint64_t ExecuteTasks(Tasks&&... args) {
             std::vector<VkComputeTask> tasks;
             (tasks.emplace_back(std::move(args)), ...);
-            uint64_t sync_value = std::ranges::max_element(tasks, [](auto& a, auto& b) {
+            if (tasks.empty()) return 0;
+            uint64_t sync_value = std::max_element(tasks.begin(), tasks.end(), [](auto& a, auto& b) {
                 return a.GetFenceValue() < b.GetFenceValue();
             })->GetFenceValue();
-            if (tasks.empty()) return 0;
             dispatcher_->GetFence().CPUWait(last_sync_);
             VKCHECK(vkResetDescriptorPool(initializer_.GetVkDevice(), descriptor_pool_, 0));
             auto nval = dispatcher_->BatchedDispatch(tasks.size(), [&](auto i, const auto& command_buffer) {

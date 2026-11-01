@@ -92,4 +92,10 @@ namespace vkdiffusion
             if (initialized_) reinterpret_cast<T*>(object_)->~T();
         }
     };
+
+    template<typename T, typename... Args>
+    requires (std::is_same_v<T, Args> && ...)
+    bool same(const T& a, const Args&... other) {
+        return ((a == other) && ...);
+    }
 }
